@@ -13,8 +13,10 @@ app.css.append_css({
     "external_url": "https://codepen.io/chriddyp/pen/bWLwgP.css"
 })
 
-kickstarter_df = pd.read_csv('kickstarter-cleaned-subset.csv')
+kickstarter_df = pd.read_csv('kickstarter-cleaned-subset.csv', parse_dates=True)
 kickstarter_df_sub = kickstarter_df.sample(10000)
+
+kickstarter_df['created_at'] = pd.to_datetime(kickstarter_df['created_at'])
 
 
 def generate_table(dataframe, max_rows=10):
@@ -118,17 +120,34 @@ app.layout = html.Div(children=[
         labelStyle={'display': 'inline-block'}
     ),
     dcc.Graph(id='kickstarter-barchart'),
+    html.Div(children=[
+        dcc.Slider(
+            id='kickstarter-barchart-year-slider',
+            min=2011,
+            max=2017,
+            value=kickstarter_df['created_at'].dt.year.max(),
+            step=None,
+            marks={str(year): str(year) for year in range(2011, 2018)}
+        ),
+    ], style={
+        'marginBottom': '50px',
+    }),
     dcc.Graph(id='map', figure=figure)
 ])
 
 
 @app.callback(
     dash.dependencies.Output('kickstarter-barchart', 'figure'),
-    [dash.dependencies.Input('kickstarter-barchart-type', 'value')])
-def update_bar_chart(kickstarter_barchart_type):
+    [
+        dash.dependencies.Input('kickstarter-barchart-type', 'value'),
+        dash.dependencies.Input('kickstarter-barchart-year-slider', 'value'),
+    ])
+def update_bar_chart(kickstarter_barchart_type, kickstarter_barchart_year_slider):
     """Update bar chart."""
     stacked_barchart_df = (
-        kickstarter_df['state'].groupby(kickstarter_df['broader_category'])
+        kickstarter_df[
+            (kickstarter_df['created_at'].dt.year == kickstarter_barchart_year_slider)
+        ]['state'].groupby(kickstarter_df['broader_category'])
         .value_counts(normalize=kickstarter_barchart_type == 'normalized')
         .rename('count')
         .to_frame()
