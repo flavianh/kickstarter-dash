@@ -5,6 +5,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
 import dash_table_experiments as dt
+import iso3166
 import pandas as pd
 
 app = dash.Dash()
@@ -30,6 +31,43 @@ def generate_table(dataframe, max_rows=10):
 
 
 columns = ['launched_at', 'deadline', 'blurb', 'usd_pledged', 'state', 'spotlight', 'staff_pick', 'category_slug', 'backers_count', 'country']
+
+kickstarter_country = kickstarter_df.groupby('country').count().reset_index()
+# Convert country names to alpha3 standard
+kickstarter_country['country'] = kickstarter_country['country'].map(lambda alpha2: iso3166.countries_by_alpha2[alpha2].alpha3)
+
+data = [
+    dict(
+        type='choropleth',
+        locations=kickstarter_country.country,
+        z=kickstarter_country.id,
+        text=kickstarter_country.country,
+        autocolorscale=True,
+        colorbar=dict(
+            autotick=True,
+            title='Number of projects'
+        ),
+        marker=dict(
+            line=dict(
+                color='rgb(180,180,180)',
+                width=0.5
+            )
+        ),
+    )
+]
+
+layout = dict(
+    title='Project counts by country',
+    geo=dict(
+        showland=True,
+        landcolor="#DDDDDD",
+        projection=dict(
+            type='Mercator'
+        )
+    )
+)
+
+figure = dict(data=data, layout=layout)
 
 app.layout = html.Div(children=[
     html.H1(children='Kickstarter Dashboard', style={
@@ -71,6 +109,7 @@ app.layout = html.Div(children=[
         sortable=True,
         id='kickstarter-datatable'
     ),
+    dcc.Graph(id='map', figure=figure)
 ])
 
 if __name__ == '__main__':
