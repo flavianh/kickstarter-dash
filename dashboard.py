@@ -12,6 +12,21 @@ app.css.append_css({
 })
 
 kickstarter_df = pd.read_csv('kickstarter-cleaned-subset.csv')
+kickstarter_df_sub = kickstarter_df.sample(10000)
+
+
+def generate_table(dataframe, max_rows=10):
+    """Generate an HTML table from a dataframe."""
+    return html.Table(
+        # Header
+        [html.Tr([html.Th(col) for col in dataframe.columns])] +
+
+        # Body
+        [html.Tr([
+            html.Td(str(dataframe.iloc[i][col])) for col in dataframe.columns
+        ]) for i in range(min(len(dataframe), max_rows))]
+    )
+
 
 app.layout = html.Div(children=[
     html.H1(children='Kickstarter Dashboard', style={
@@ -23,9 +38,9 @@ app.layout = html.Div(children=[
         figure={
             'data': [
                 go.Scatter(
-                    x=kickstarter_df[kickstarter_df.state == state]['created_at'],
-                    y=kickstarter_df[kickstarter_df.state == state]['usd_pledged'],
-                    text=kickstarter_df[kickstarter_df.state == state]['name'],
+                    x=kickstarter_df_sub[kickstarter_df_sub.state == state]['created_at'],
+                    y=kickstarter_df_sub[kickstarter_df_sub.state == state]['usd_pledged'],
+                    text=kickstarter_df_sub[kickstarter_df_sub.state == state]['name'],
                     mode='markers',
                     opacity=0.7,
                     marker={
@@ -43,7 +58,8 @@ app.layout = html.Div(children=[
                 hovermode='closest'
             )
         }
-    )
+    ),
+    generate_table(kickstarter_df[['launched_at', 'deadline', 'blurb', 'usd_pledged', 'state', 'spotlight', 'staff_pick', 'category_slug', 'backers_count', 'country']])
 ])
 
 if __name__ == '__main__':
