@@ -36,6 +36,17 @@ kickstarter_country = kickstarter_df.groupby('country').count().reset_index()
 # Convert country names to alpha3 standard
 kickstarter_country['country'] = kickstarter_country['country'].map(lambda alpha2: iso3166.countries_by_alpha2[alpha2].alpha3)
 
+kickstarter_df['broader_category'] = kickstarter_df['category_slug'].str.split('/').str.get(0)
+stacked_barchart_df = (
+    kickstarter_df['state'].groupby(kickstarter_df['broader_category'])
+    .value_counts()
+    .rename('count')
+    .to_frame()
+    .reset_index('state')
+    .pivot(columns='state')
+    .reset_index()
+)
+
 data = [
     dict(
         type='choropleth',
@@ -108,6 +119,26 @@ app.layout = html.Div(children=[
         filterable=True,
         sortable=True,
         id='kickstarter-datatable'
+    ),
+    dcc.Graph(
+        id='kickstarter-barchart',
+        figure={
+            'data': [
+                go.Bar(
+                    x=stacked_barchart_df['broader_category'],
+                    y=stacked_barchart_df['count'][state],
+                    name=state,
+                ) for state in ['canceled', 'failed', 'successful', 'suspended']
+            ],
+            'layout': go.Layout(
+                xaxis={'title': 'Date'},
+                yaxis={'title': 'USD pledged'},
+                barmode='stack',
+                margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
+                legend={'x': 0, 'y': 1},
+                hovermode='closest'
+            )
+        }
     ),
     dcc.Graph(id='map', figure=figure)
 ])
