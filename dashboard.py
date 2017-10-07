@@ -4,6 +4,7 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
+import dash_table_experiments as dt
 import pandas as pd
 
 app = dash.Dash()
@@ -27,6 +28,8 @@ def generate_table(dataframe, max_rows=10):
         ]) for i in range(min(len(dataframe), max_rows))]
     )
 
+
+columns = ['launched_at', 'deadline', 'blurb', 'usd_pledged', 'state', 'spotlight', 'staff_pick', 'category_slug', 'backers_count', 'country']
 
 app.layout = html.Div(children=[
     html.H1(children='Kickstarter Dashboard', style={
@@ -59,7 +62,15 @@ app.layout = html.Div(children=[
             )
         }
     ),
-    generate_table(kickstarter_df[['launched_at', 'deadline', 'blurb', 'usd_pledged', 'state', 'spotlight', 'staff_pick', 'category_slug', 'backers_count', 'country']])
+    dt.DataTable(
+        # Using astype(str) to show booleans
+        rows=kickstarter_df[columns].sample(100).astype(str).to_dict('records'),
+        columns=columns,
+        editable=False,
+        filterable=True,
+        sortable=True,
+        id='kickstarter-datatable'
+    ),
 ])
 
 if __name__ == '__main__':
