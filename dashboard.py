@@ -37,15 +37,6 @@ kickstarter_country = kickstarter_df.groupby('country').count().reset_index()
 kickstarter_country['country'] = kickstarter_country['country'].map(lambda alpha2: iso3166.countries_by_alpha2[alpha2].alpha3)
 
 kickstarter_df['broader_category'] = kickstarter_df['category_slug'].str.split('/').str.get(0)
-stacked_barchart_df = (
-    kickstarter_df['state'].groupby(kickstarter_df['broader_category'])
-    .value_counts()
-    .rename('count')
-    .to_frame()
-    .reset_index('state')
-    .pivot(columns='state')
-    .reset_index()
-)
 
 data = [
     dict(
@@ -120,28 +111,49 @@ app.layout = html.Div(children=[
         sortable=True,
         id='kickstarter-datatable'
     ),
-    dcc.Graph(
-        id='kickstarter-barchart',
-        figure={
-            'data': [
-                go.Bar(
-                    x=stacked_barchart_df['broader_category'],
-                    y=stacked_barchart_df['count'][state],
-                    name=state,
-                ) for state in ['canceled', 'failed', 'successful', 'suspended']
-            ],
-            'layout': go.Layout(
-                xaxis={'title': 'Date'},
-                yaxis={'title': 'USD pledged'},
-                barmode='stack',
-                margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
-                legend={'x': 0, 'y': 1},
-                hovermode='closest'
-            )
-        }
+    dcc.RadioItems(
+        id='kickstarter-barchart-type',
+        options=[{'label': i, 'value': i} for i in ['cumulative', 'normalized']],
+        value='cumulative',
+        labelStyle={'display': 'inline-block'}
     ),
+    dcc.Graph(id='kickstarter-barchart'),
     dcc.Graph(id='map', figure=figure)
 ])
+
+
+@app.callback(
+    dash.dependencies.Output('kickstarter-barchart', 'figure'),
+    [dash.dependencies.Input('kickstarter-barchart-type', 'value')])
+def update_bar_chart(kickstarter_barchart_type):
+    """Update bar chart."""
+    stacked_barchart_df = (
+        kickstarter_df['state'].groupby(kickstarter_df['broader_category'])
+        .value_counts(normalize=kickstarter_barchart_type == 'normalized')
+        .rename('count')
+        .to_frame()
+        .reset_index('state')
+        .pivot(columns='state')
+        .reset_index()
+    )
+
+    return {
+        'data': [
+            go.Bar(
+                x=stacked_barchart_df['broader_category'],
+                y=stacked_barchart_df['count'][state],
+                name=state,
+            ) for state in ['canceled', 'failed', 'successful', 'suspended']
+        ],
+        'layout': go.Layout(
+            xaxis={'title': 'Date'},
+            yaxis={'title': 'USD pledged'},
+            barmode='stack',
+            margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
+            legend={'x': 0, 'y': 1},
+            hovermode='closest'
+        )
+    }
 
 if __name__ == '__main__':
     app.run_server(debug=True)
