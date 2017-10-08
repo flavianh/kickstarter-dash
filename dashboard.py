@@ -1,12 +1,19 @@
 # -*- coding: utf-8 -*-
 
+import matplotlib
+matplotlib.use('TkAgg')
+
+import base64
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
+import functools
 import plotly.graph_objs as go
 import dash_table_experiments as dt
+import io
 import iso3166
 import pandas as pd
+from wordcloud import WordCloud, STOPWORDS
 
 app = dash.Dash()
 app.css.append_css({
@@ -104,6 +111,23 @@ app.layout = html.Div(children=[
             )
         }
     ),
+    dcc.Checklist(
+        id='states',
+        options=[{'label': i, 'value': i} for i in ['canceled', 'failed', 'successful', 'suspended']],
+        values=['canceled', 'failed', 'successful', 'suspended'],
+        labelStyle={'display': 'inline-block'}
+    ),
+    dcc.Dropdown(
+        id='category',
+        options=[{'label': i, 'value': i} for i in kickstarter_df['broader_category'].unique()],
+        value=kickstarter_df['broader_category'].unique()[0],
+    ),
+    html.Div(
+        children=[html.Img(id='wordcloud')],
+        style={
+            'textAlign': 'center',
+        }
+    ),
     dt.DataTable(
         # Using astype(str) to show booleans
         rows=kickstarter_df[columns].sample(100).astype(str).to_dict('records'),
@@ -138,7 +162,7 @@ app.layout = html.Div(children=[
     ], style={
         'marginBottom': '50px',
     }),
-    dcc.Graph(id='map', figure=figure)
+    dcc.Graph(id='map', figure=figure),
 ])
 
 
@@ -194,6 +218,35 @@ def update_bar_chart(kickstarter_barchart_type, kickstarter_barchart_aggregation
             hovermode='closest'
         )
     }
+
+
+@app.callback(
+    dash.dependencies.Output('wordcloud', 'src'),
+    [
+        dash.dependencies.Input('states', 'values'),
+        dash.dependencies.Input('category', 'value'),
+    ])
+def update_wordcloud(states, category):
+    """Update the wordcloud."""
+    if states == []:
+        return ''
+    states = frozenset(states)
+    return _update_wordcloud_from_set(states, category)
+
+
+@functools.lru_cache(maxsize=50)
+def _update_wordcloud_from_set(states, category):
+    """Update the wordcloud."""
+    wordcloud_buffer = io.BytesIO()
+    wordcloud_image = (
+        WordCloud(stopwords=set(STOPWORDS), background_color='white', max_words=500, width=800, height=400)
+        .generate(' '.join(kickstarter_df[kickstarter_df.state.isin(states) & (kickstarter_df.broader_category == category)].blurb).lower()).to_image()
+    )
+    wordcloud_image.save(wordcloud_buffer, format="JPEG")
+    encoded_wordcloud = base64.b64encode(wordcloud_buffer.getvalue()).decode('utf-8')
+
+    return 'data:image/png;base64,{}'.format(encoded_wordcloud)
+
 
 if __name__ == '__main__':
     app.run_server(debug=True)
