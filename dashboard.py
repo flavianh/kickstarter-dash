@@ -84,43 +84,19 @@ app.layout = html.Div(children=[
     html.H1(children='Kickstarter Dashboard', style={
         'textAlign': 'center',
     }),
-
+    dcc.Dropdown(
+        id='category',
+        options=[{'label': i, 'value': i} for i in kickstarter_df['broader_category'].unique()],
+        value=kickstarter_df['broader_category'].unique()[0],
+    ),
     dcc.Graph(
-        id='life-exp-vs-gdp',
-        figure={
-            'data': [
-                go.Scatter(
-                    x=kickstarter_df_sub[kickstarter_df_sub.state == state]['created_at'],
-                    y=kickstarter_df_sub[kickstarter_df_sub.state == state]['usd_pledged'],
-                    text=kickstarter_df_sub[kickstarter_df_sub.state == state]['name'],
-                    mode='markers',
-                    opacity=0.7,
-                    marker={
-                        'size': 15,
-                        'line': {'width': 0.5, 'color': 'white'}
-                    },
-                    name=state,
-                ) for state in kickstarter_df.state.unique()
-            ],
-            'layout': go.Layout(
-                xaxis={'title': 'Date'},
-                yaxis={'title': 'USD pledged', 'type': 'log'},
-                margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
-                legend={'x': 0, 'y': 1},
-                hovermode='closest'
-            )
-        }
+        id='life-exp-vs-gdp'
     ),
     dcc.Checklist(
         id='states',
         options=[{'label': i, 'value': i} for i in ['canceled', 'failed', 'successful', 'suspended']],
         values=['canceled', 'failed', 'successful', 'suspended'],
         labelStyle={'display': 'inline-block'}
-    ),
-    dcc.Dropdown(
-        id='category',
-        options=[{'label': i, 'value': i} for i in kickstarter_df['broader_category'].unique()],
-        value=kickstarter_df['broader_category'].unique()[0],
     ),
     html.Div(
         children=[html.Img(id='wordcloud')],
@@ -213,6 +189,39 @@ def update_bar_chart(kickstarter_barchart_type, kickstarter_barchart_aggregation
             xaxis={'title': 'Date'},
             yaxis={'title': 'USD pledged'},
             barmode='stack',
+            margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
+            legend={'x': 0, 'y': 1},
+            hovermode='closest'
+        )
+    }
+
+
+@app.callback(
+    dash.dependencies.Output('life-exp-vs-gdp', 'figure'),
+    [
+        dash.dependencies.Input('category', 'value'),
+    ])
+@functools.lru_cache(maxsize=50)
+def update_usd_pledged_vs_time(category):
+    """Update the graph."""
+    return {
+        'data': [
+            go.Scatter(
+                x=kickstarter_df_sub[(kickstarter_df.broader_category == category) & (kickstarter_df_sub.state == state)]['created_at'],
+                y=kickstarter_df_sub[(kickstarter_df.broader_category == category) & (kickstarter_df_sub.state == state)]['usd_pledged'],
+                text=kickstarter_df_sub[(kickstarter_df.broader_category == category) & (kickstarter_df_sub.state == state)]['name'],
+                mode='markers',
+                opacity=0.7,
+                marker={
+                    'size': 15,
+                    'line': {'width': 0.5, 'color': 'white'}
+                },
+                name=state,
+            ) for state in kickstarter_df.state.unique()
+        ],
+        'layout': go.Layout(
+            xaxis={'title': 'Date'},
+            yaxis={'title': 'USD pledged', 'type': 'log'},
             margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
             legend={'x': 0, 'y': 1},
             hovermode='closest'
