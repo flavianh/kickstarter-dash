@@ -119,6 +119,12 @@ app.layout = html.Div(children=[
         value='cumulative',
         labelStyle={'display': 'inline-block'}
     ),
+    dcc.RadioItems(
+        id='kickstarter-barchart-aggregation',
+        options=[{'label': i, 'value': i} for i in ['count', 'usd_pledged']],
+        value='count',
+        labelStyle={'display': 'inline-block'}
+    ),
     dcc.Graph(id='kickstarter-barchart'),
     html.Div(children=[
         dcc.Slider(
@@ -140,27 +146,42 @@ app.layout = html.Div(children=[
     dash.dependencies.Output('kickstarter-barchart', 'figure'),
     [
         dash.dependencies.Input('kickstarter-barchart-type', 'value'),
+        dash.dependencies.Input('kickstarter-barchart-aggregation', 'value'),
         dash.dependencies.Input('kickstarter-barchart-year-slider', 'value'),
     ])
-def update_bar_chart(kickstarter_barchart_type, kickstarter_barchart_year_slider):
+def update_bar_chart(kickstarter_barchart_type, kickstarter_barchart_aggregation, kickstarter_barchart_year_slider):
     """Update bar chart."""
-    stacked_barchart_df = (
-        kickstarter_df[
-            (kickstarter_df['created_at'].dt.year == kickstarter_barchart_year_slider)
-        ]['state'].groupby(kickstarter_df['broader_category'])
-        .value_counts(normalize=kickstarter_barchart_type == 'normalized')
-        .rename('count')
-        .to_frame()
-        .reset_index('state')
-        .pivot(columns='state')
-        .reset_index()
-    )
+    if 'usd_pledged' == kickstarter_barchart_aggregation:
+        stacked_barchart_df = (
+            kickstarter_df[
+                (kickstarter_df['created_at'].dt.year == kickstarter_barchart_year_slider)
+            ]
+            .groupby(['broader_category', 'state'])[[kickstarter_barchart_aggregation]]
+            .sum()
+            .reset_index('state')
+            .pivot(columns='state')
+        )
+        if kickstarter_barchart_type == 'normalized':
+            stacked_barchart_df = stacked_barchart_df.div(stacked_barchart_df.sum(axis=1), axis=0)
+        stacked_barchart_df.reset_index(inplace=True)
+    else:
+        stacked_barchart_df = (
+            kickstarter_df[
+                (kickstarter_df['created_at'].dt.year == kickstarter_barchart_year_slider)
+            ]['state'].groupby(kickstarter_df['broader_category'])
+            .value_counts(normalize=kickstarter_barchart_type == 'normalized')
+            .rename(kickstarter_barchart_aggregation)
+            .to_frame()
+            .reset_index('state')
+            .pivot(columns='state')
+            .reset_index()
+        )
 
     return {
         'data': [
             go.Bar(
                 x=stacked_barchart_df['broader_category'],
-                y=stacked_barchart_df['count'][state],
+                y=stacked_barchart_df[kickstarter_barchart_aggregation][state],
                 name=state,
             ) for state in ['canceled', 'failed', 'successful', 'suspended']
         ],
