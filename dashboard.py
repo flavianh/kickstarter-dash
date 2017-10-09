@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import matplotlib
-matplotlib.use('TkAgg')
-
 import base64
 import dash
 import dash_core_components as dcc
@@ -14,7 +11,15 @@ import dash_table_experiments as dt
 import io
 import iso3166
 import pandas as pd
+import random
 from wordcloud import WordCloud, STOPWORDS
+
+
+def grey_color_func(word, font_size, position, orientation, random_state=None,
+                    **kwargs):
+    """Color function for wordcloud."""
+    return 'hsl(0, 0%, {0}%)'.format(20)
+
 
 app = dash.Dash()
 app.css.append_css({
@@ -249,7 +254,7 @@ def _update_wordcloud_from_set(states, category):
     """Update the wordcloud."""
     wordcloud_buffer = io.BytesIO()
     wordcloud_image = (
-        WordCloud(stopwords=set(STOPWORDS), background_color='white', max_words=500, width=800, height=400)
+        WordCloud(stopwords=set(STOPWORDS), background_color='white', max_words=500, width=800, height=400, color_func=grey_color_func)
         .generate(' '.join(kickstarter_df[kickstarter_df.state.isin(states) & (kickstarter_df.broader_category == category)].blurb).lower()).to_image()
     )
     wordcloud_image.save(wordcloud_buffer, format="JPEG")
