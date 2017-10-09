@@ -8,6 +8,7 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import functools
+import os
 import plotly.graph_objs as go
 import dash_table_experiments as dt
 import io
@@ -258,4 +259,5 @@ def _update_wordcloud_from_set(states, category):
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run_server(debug=True, host='0.0.0.0', port=port)
