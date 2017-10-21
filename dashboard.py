@@ -7,9 +7,11 @@ import dash_html_components as html
 import functools
 import os
 import plotly.graph_objs as go
+import plotly.figure_factory as ff
 import dash_table_experiments as dt
 import io
 import iso3166
+import numpy as np
 import pandas as pd
 import random
 from wordcloud import WordCloud, STOPWORDS
@@ -26,10 +28,79 @@ app.css.append_css({
     "external_url": "https://codepen.io/chriddyp/pen/bWLwgP.css"
 })
 
-kickstarter_df = pd.read_csv('kickstarter-cleaned-subset.csv', parse_dates=True)
+kickstarter_df = pd.read_csv('kickstarter-cleaned.csv', parse_dates=True)
 kickstarter_df_sub = kickstarter_df.sample(10000)
 
 kickstarter_df['created_at'] = pd.to_datetime(kickstarter_df['created_at'])
+
+
+def get_state_trace(x, state, color, df):
+    """Generate a bar trace from x, state, color and a dataframe."""
+    # Count number of rows under state `name`
+    trace_data = [
+        (df[(~df.staff_pick)].state == state).sum(),
+        (df[(df.staff_pick)].state == state).sum(),
+    ]
+    return go.Bar(
+        x=x,
+        y=trace_data,
+        name=state,
+        marker=dict(
+            color=color
+        )
+    )
+
+
+def generate_grouped_bar_chart_vs_spotlight_and_staff_pick(df):
+    """Generate a figure with success rate box plot according to combinations of spotlight and staff pick values."""
+    x = [
+        'Not picked by staff',
+        'Picked by staff'
+    ]
+
+    states = ['failed', 'suspended', 'canceled', 'successful']
+    colors = ['#C7583F', '#D4752E', '#C7B815', '#7DFB6D']
+    data = [
+        get_state_trace(x, state, color, df)
+        for (state, color) in zip(states, colors)
+    ]
+
+    layout = go.Layout(
+        barmode='group',
+        title='Number of projects in a given state relative to spotlight and staff pick'
+    )
+    fig = go.Figure(data=data, layout=layout)
+
+    return fig
+
+
+def generate_usd_pledged_hist_vs_spotlight_and_staff_pick(df):
+    """Generate a figure with USD pledged histogram according to combinations of spotlight and staff pick values."""
+    bin_size = 2000
+    df_successful = df[(df.state == 'successful') & (df.usd_pledged < 100000)]
+    hist_data = [
+        df_successful[(~df_successful.staff_pick)].usd_pledged.values,
+        df_successful[(df_successful.staff_pick)].usd_pledged.values,
+    ]
+
+    group_labels = [
+        'Not picked by staff',
+        'Picked by staff'
+    ]
+
+    colors = ['#03241F', '#68D35A']
+
+    # Create distplot with curve_type set to 'normal'
+    fig = ff.create_distplot(hist_data, group_labels, colors=colors,
+                             bin_size=bin_size, show_rug=False)
+
+    # Add title
+    fig['layout'].update(
+        title='Successful projects with under $100k pledged',
+        xaxis={'title': 'Money pledged in USD'},
+        yaxis={'title': 'Proportion'},
+    )
+    return fig
 
 
 def generate_table(dataframe, max_rows=10):
@@ -49,7 +120,17 @@ columns = ['launched_at', 'deadline', 'blurb', 'usd_pledged', 'state', 'spotligh
 
 kickstarter_country = kickstarter_df.groupby('country').count().reset_index()
 # Convert country names to alpha3 standard
-kickstarter_country['country'] = kickstarter_country['country'].map(lambda alpha2: iso3166.countries_by_alpha2[alpha2].alpha3)
+
+
+def get_alpha3(alpha2):
+    """Get alpha3 code from alpha2 code."""
+    country = iso3166.countries_by_alpha2.get(alpha2)
+    if country is None:
+        return 'UNKNOWN'
+    return country.alpha3
+
+
+kickstarter_country['country'] = kickstarter_country['country'].map(get_alpha3)
 
 kickstarter_df['broader_category'] = kickstarter_df['category_slug'].str.split('/').str.get(0)
 
@@ -109,6 +190,14 @@ app.layout = html.Div(children=[
         style={
             'textAlign': 'center',
         }
+    ),
+    dcc.Graph(
+        id='generate-usd-pledged-hist-vs-spotlight-and-staff-pick',
+        figure=generate_usd_pledged_hist_vs_spotlight_and_staff_pick(kickstarter_df)
+    ),
+    dcc.Graph(
+        id='generate-success-rate-boxed-plot-vs-spotlight-and-staff-pick',
+        figure=generate_grouped_bar_chart_vs_spotlight_and_staff_pick(kickstarter_df)
     ),
     dt.DataTable(
         # Using astype(str) to show booleans
@@ -252,10 +341,11 @@ def update_wordcloud(states, category):
 @functools.lru_cache(maxsize=50)
 def _update_wordcloud_from_set(states, category):
     """Update the wordcloud."""
+    text = ' '.join(kickstarter_df_sub[kickstarter_df_sub.state.isin(states) & (kickstarter_df_sub.broader_category == category)].blurb).lower()
     wordcloud_buffer = io.BytesIO()
     wordcloud_image = (
         WordCloud(stopwords=set(STOPWORDS), background_color='white', max_words=500, width=800, height=400, color_func=grey_color_func)
-        .generate(' '.join(kickstarter_df[kickstarter_df.state.isin(states) & (kickstarter_df.broader_category == category)].blurb).lower()).to_image()
+        .generate(text).to_image()
     )
     wordcloud_image.save(wordcloud_buffer, format="JPEG")
     encoded_wordcloud = base64.b64encode(wordcloud_buffer.getvalue()).decode('utf-8')

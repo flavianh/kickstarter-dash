@@ -6,4 +6,5 @@ dash-table-experiments==0.5.0
 iso3166
 pandas
 plotly
+scipy
 wordcloud
