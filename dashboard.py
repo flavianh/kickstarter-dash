@@ -1,26 +1,19 @@
 # -*- coding: utf-8 -*-
 
 import base64
+import functools
+import io
+import os
+
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
-import functools
-import os
+import dash_table_experiments as dt
 import plotly.graph_objs as go
 import plotly.figure_factory as ff
-import dash_table_experiments as dt
-import io
 import iso3166
-import numpy as np
 import pandas as pd
-import random
 from wordcloud import WordCloud, STOPWORDS
-
-
-def grey_color_func(word, font_size, position, orientation, random_state=None,
-                    **kwargs):
-    """Color function for wordcloud."""
-    return 'hsl(0, 0%, {0}%)'.format(20)
 
 
 app = dash.Dash()
@@ -28,10 +21,38 @@ app.css.append_css({
     "external_url": "https://codepen.io/chriddyp/pen/bWLwgP.css"
 })
 
+##############################################################
+#                                                            #
+#             D  A  T  A     L  O  A  D  I  N  G             #
+#                                                            #
+##############################################################
+
+
+def get_alpha3(alpha2):
+    """Get alpha3 code from alpha2 code."""
+    country = iso3166.countries_by_alpha2.get(alpha2)
+    if country is None:
+        return 'UNKNOWN'
+    return country.alpha3
+
+
 kickstarter_df = pd.read_csv('kickstarter-cleaned.csv', parse_dates=True)
 kickstarter_df_sub = kickstarter_df.sample(10000)
-
 kickstarter_df['created_at'] = pd.to_datetime(kickstarter_df['created_at'])
+
+kickstarter_country = kickstarter_df.groupby('country').count().reset_index()
+kickstarter_country['country'] = kickstarter_country['country'].map(get_alpha3)
+kickstarter_df['broader_category'] = kickstarter_df['category_slug'].str.split('/').str.get(0)
+
+COLUMNS = ['launched_at', 'deadline', 'blurb', 'usd_pledged', 'state', 'spotlight', 'staff_pick', 'category_slug', 'backers_count', 'country']
+COLORS = ['#C7583F', '#D4752E', '#C7B815', '#7DFB6D']
+
+
+##############################################################
+#                                                            #
+#        D  A  T  A     F  U  N  C  T  I  O  N  S            #
+#                                                            #
+##############################################################
 
 
 def get_state_trace(x, state, color, df):
@@ -116,56 +137,54 @@ def generate_table(dataframe, max_rows=10):
     )
 
 
-columns = ['launched_at', 'deadline', 'blurb', 'usd_pledged', 'state', 'spotlight', 'staff_pick', 'category_slug', 'backers_count', 'country']
-
-kickstarter_country = kickstarter_df.groupby('country').count().reset_index()
-# Convert country names to alpha3 standard
-
-
-def get_alpha3(alpha2):
-    """Get alpha3 code from alpha2 code."""
-    country = iso3166.countries_by_alpha2.get(alpha2)
-    if country is None:
-        return 'UNKNOWN'
-    return country.alpha3
+def grey_color_func(word, font_size, position, orientation, random_state=None,
+                    **kwargs):
+    """Color function for wordcloud."""
+    return 'hsl(0, 0%, {0}%)'.format(20)
 
 
-kickstarter_country['country'] = kickstarter_country['country'].map(get_alpha3)
+def generate_map():
+    data = [
+        dict(
+            type='choropleth',
+            locations=kickstarter_country.country,
+            z=kickstarter_country.id,
+            text=kickstarter_country.country,
+            autocolorscale=True,
+            colorbar=dict(
+                autotick=True,
+                title='Number of projects'
+            ),
+            marker=dict(
+                line=dict(
+                    color='rgb(180,180,180)',
+                    width=0.5
+                )
+            ),
+        )
+    ]
 
-kickstarter_df['broader_category'] = kickstarter_df['category_slug'].str.split('/').str.get(0)
-
-data = [
-    dict(
-        type='choropleth',
-        locations=kickstarter_country.country,
-        z=kickstarter_country.id,
-        text=kickstarter_country.country,
-        autocolorscale=True,
-        colorbar=dict(
-            autotick=True,
-            title='Number of projects'
-        ),
-        marker=dict(
-            line=dict(
-                color='rgb(180,180,180)',
-                width=0.5
+    layout = dict(
+        title='Project counts by country',
+        geo=dict(
+            showland=True,
+            landcolor="#DDDDDD",
+            projection=dict(
+                type='Mercator'
             )
-        ),
-    )
-]
-
-layout = dict(
-    title='Project counts by country',
-    geo=dict(
-        showland=True,
-        landcolor="#DDDDDD",
-        projection=dict(
-            type='Mercator'
         )
     )
-)
 
-figure = dict(data=data, layout=layout)
+    figure = dict(data=data, layout=layout)
+    return figure
+
+
+##############################################################
+#                                                            #
+#                   L  A  Y  O  U  T                         #
+#                                                            #
+##############################################################
+
 
 app.layout = html.Div(children=[
     html.H1(children='Kickstarter Dashboard', style={
@@ -177,19 +196,13 @@ app.layout = html.Div(children=[
         value=kickstarter_df['broader_category'].unique()[0],
     ),
     dcc.Graph(
-        id='life-exp-vs-gdp'
+        id='money-vs-date'
     ),
     dcc.Checklist(
         id='states',
         options=[{'label': i, 'value': i} for i in ['canceled', 'failed', 'successful', 'suspended']],
         values=['canceled', 'failed', 'successful', 'suspended'],
         labelStyle={'display': 'inline-block'}
-    ),
-    html.Div(
-        children=[html.Img(id='wordcloud')],
-        style={
-            'textAlign': 'center',
-        }
     ),
     dcc.Graph(
         id='generate-usd-pledged-hist-vs-spotlight-and-staff-pick',
@@ -198,15 +211,6 @@ app.layout = html.Div(children=[
     dcc.Graph(
         id='generate-success-rate-boxed-plot-vs-spotlight-and-staff-pick',
         figure=generate_grouped_bar_chart_vs_spotlight_and_staff_pick(kickstarter_df)
-    ),
-    dt.DataTable(
-        # Using astype(str) to show booleans
-        rows=kickstarter_df[columns].sample(100).astype(str).to_dict('records'),
-        columns=columns,
-        editable=False,
-        filterable=True,
-        sortable=True,
-        id='kickstarter-datatable'
     ),
     dcc.RadioItems(
         id='kickstarter-barchart-type',
@@ -233,8 +237,30 @@ app.layout = html.Div(children=[
     ], style={
         'marginBottom': '50px',
     }),
-    dcc.Graph(id='map', figure=figure),
+    html.Div(
+        children=[html.Img(id='wordcloud')],
+        style={
+            'textAlign': 'center',
+        }
+    ),
+    dt.DataTable(
+        # Using astype(str) to show booleans
+        rows=kickstarter_df[COLUMNS].sample(100).astype(str).to_dict('records'),
+        columns=COLUMNS,
+        editable=False,
+        filterable=True,
+        sortable=True,
+        id='kickstarter-datatable'
+    ),
+    dcc.Graph(id='map', figure=generate_map()),
 ])
+
+
+##############################################################
+#                                                            #
+#                  E  V  E  N  T  S                          #
+#                                                            #
+##############################################################
 
 
 @app.callback(
@@ -258,7 +284,7 @@ def update_bar_chart(kickstarter_barchart_type, kickstarter_barchart_aggregation
         )
         if kickstarter_barchart_type == 'normalized':
             stacked_barchart_df = stacked_barchart_df.div(stacked_barchart_df.sum(axis=1), axis=0)
-        stacked_barchart_df.reset_index(inplace=True)
+        stacked_barchart_df.reset_index(lace=True)
     else:
         stacked_barchart_df = (
             kickstarter_df[
@@ -292,7 +318,7 @@ def update_bar_chart(kickstarter_barchart_type, kickstarter_barchart_aggregation
 
 
 @app.callback(
-    dash.dependencies.Output('life-exp-vs-gdp', 'figure'),
+    dash.dependencies.Output('money-vs-date', 'figure'),
     [
         dash.dependencies.Input('category', 'value'),
     ])
@@ -309,10 +335,11 @@ def update_usd_pledged_vs_time(category):
                 opacity=0.7,
                 marker={
                     'size': 15,
+                    'color': color,
                     'line': {'width': 0.5, 'color': 'white'}
                 },
                 name=state,
-            ) for state in kickstarter_df.state.unique()
+            ) for (state, color) in zip(kickstarter_df.state.unique(), COLORS[::-1])
         ],
         'layout': go.Layout(
             xaxis={'title': 'Date'},
@@ -351,6 +378,13 @@ def _update_wordcloud_from_set(states, category):
     encoded_wordcloud = base64.b64encode(wordcloud_buffer.getvalue()).decode('utf-8')
 
     return 'data:image/png;base64,{}'.format(encoded_wordcloud)
+
+
+##############################################################
+#                                                            #
+#                      M  A  I  N                            #
+#                                                            #
+##############################################################
 
 
 if __name__ == '__main__':
